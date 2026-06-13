@@ -1,0 +1,66 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+
+# PyCharm / VS Code / IDE settings
+.idea/
+.vscode/
+
+# Flask instance folder
+instance/
+
+# Local environment variables
+.env
+.env.*
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Mac / Windows system files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Model, data, and output files
+*.h5
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.onnx
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Ignore generated HTML if produced by notebooks or docs
+*.html
