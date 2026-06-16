@@ -25,18 +25,36 @@ LEAKAGE_COLS = {
 }
 
 # ─── LOAD MODEL ─────────────────────────────────────────────
-MODEL_PATH = "si_prediction_model.pkl"
-model_package = None
+STEAM_ZERO_MODEL = "si_prediction_model_steam_zero.pkl"
+STEAM_NONZERO_MODEL = "si_prediction_steam_flow_nonzero_model.pkl"
 
-def load_model():
-    global model_package
-    try:
-        model_package = joblib.load(MODEL_PATH)
-        print(f"[OK] Model loaded — {len(model_package['feature_columns'])} features")
-    except FileNotFoundError:
-        print(f"[WARN] {MODEL_PATH} not found — prediction disabled")
+steam_zero_package = None
+steam_nonzero_package = None
 
-load_model()
+def load_models():
+
+    global steam_zero_package
+    global steam_nonzero_package
+
+    steam_zero_package = joblib.load(
+        STEAM_ZERO_MODEL
+    )
+
+    steam_nonzero_package = joblib.load(
+        STEAM_NONZERO_MODEL
+    )
+
+    print(
+        f"[OK] Steam Zero Model Loaded : "
+        f"{len(steam_zero_package['feature_columns'])} features"
+    )
+
+    print(
+        f"[OK] Steam Non-Zero Model Loaded : "
+        f"{len(steam_nonzero_package['feature_columns'])} features"
+    )
+
+load_models()
 
 # ─── DB HELPERS ─────────────────────────────────────────────
 def get_db():
@@ -54,99 +72,18 @@ def get_recent_records(limit=50):
         print(f"[DB] get_recent_records error: {e}")
         return []
 
-def save_prediction(features: dict, predicted_si: float, actual_si: float = None):
-    try:
-        conn = get_db()
-        with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO predictions
-                   (predicted_si, actual_si, hb_pres, temp_hm, fuel_inj,
-                    o2_flow, heat_flux, raft, etaco, cokerate, pcirate,
-                    created_at)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (
-                    predicted_si, actual_si,
-                    features.get("HB_PRES"), features.get("TEMP_HM"),
-                    features.get("FUEL_INJ"), features.get("O2_FLOW"),
-                    features.get("HEAT_FLUX"), features.get("RAFT"),
-                    features.get("ETACO"), features.get("COKERATE"),
-                    features.get("PCIRATE"), datetime.now()
-                )
-            )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"[DB] save_prediction error: {e}")
-
-def get_prediction_history(limit=100):
-    try:
-        conn = get_db()
-        with conn.cursor() as cur:
-            cur.execute(
-                """SELECT id, predicted_si, actual_si, hb_pres, temp_hm,
-                          fuel_inj, created_at
-                   FROM predictions ORDER BY created_at DESC LIMIT %s""",
-                (limit,)
-            )
-            rows = cur.fetchall()
-        conn.close()
-        return rows
-    except Exception as e:
-        return []
-
-def get_dashboard_stats():
-    try:
-        conn = get_db()
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) AS total FROM predictions")
-            total = cur.fetchone()["total"]
-            cur.execute(
-                """SELECT AVG(predicted_si) AS avg_si,
-                          MIN(predicted_si) AS min_si,
-                          MAX(predicted_si) AS max_si
-                   FROM predictions"""
-            )
-            stats = cur.fetchone()
-            cur.execute(
-                """SELECT DATE(created_at) AS day, COUNT(*) AS cnt,
-                          AVG(predicted_si) AS avg_si
-                   FROM predictions GROUP BY day ORDER BY day DESC LIMIT 14"""
-            )
-            trend = cur.fetchall()
-        conn.close()
-        return {"total": total, "stats": stats, "trend": trend}
-    except Exception as e:
-        return {"total": 0, "stats": {}, "trend": []}
 
 # ─── FEATURE ENGINEERING ────────────────────────────────────
-def engineer_features(raw: dict) -> pd.DataFrame:
+def engineer_features(raw, feature_columns):
+
     X = pd.DataFrame([raw])
-    X["STEAM_O2_RATIO"]  = X["STEAM_FLOW"] / (X["O2_FLOW"] + 1e-6)
-    X["HEAT_BURDEN"]     = X["HEAT_FLUX"] * X["BURDEN_RES"]
-    X["RAFT_ETACO"]      = X["RAFT"] * X["ETACO"]
-    X["PELLET_FE_SIO2"]  = X["FE_PELLETANAL"] / (X["SIO2_PELLETANAL"] + 1e-3)
-    X["SINTER_FE_SIO2"]  = X["FE_SINTERANAL"] / (X["SIO2_SINTERANAL"] + 1e-3)
-    X["FUEL_O2"]         = X["FUEL_INJ"] * X["O2_FLOW"]
-    X["TEMP_ETACO"]      = X["TEMP_HM"] * X["ETACO"]
-    X["COKE_PCI_TOTAL"]  = X["COKERATE"] + X["PCIRATE"]
-    X["M40_M10_RATIO"]   = X["M40COB6ANAL"] / (X["M10COB6ANAL"] + 1e-3)
-    X["CSR_CRI_RATIO"]   = X["CSRCOB6ANAL"] / (X["CRICOB6ANAL"] + 1e-3)
-    X["HB_PRES_VOL"]     = X["HB_PRES"] * X["HB_VOL"]
-    X["HB_PRES_TEMP"]    = X["HB_PRES"] * X["HB_TEMP"]
-    X["RAFT_HB_PRES"]    = X["RAFT"] * X["HB_PRES"]
-    X["HEAT_O2"]         = X["HEAT_FLUX"] * X["O2_FLOW"]
-    X["TOP_PRES_BURDEN"] = X["TOP_PRES"] * X["BURDEN_RES"]
-    X["O2_ETACO"]        = X["O2_FLOW"] * X["ETACO"]
-    X["FUEL_ETACO"]      = X["FUEL_INJ"] * X["ETACO"]
-    X["HEAT_TOP"]        = X["HEAT_FLUX"] * X["TOP_PRES"]
-    X["ETACO_SQ"]        = X["ETACO"] ** 2
-    X["HEAT_FLUX_SQ"]    = X["HEAT_FLUX"] ** 2
-    # If any expected feature is missing (e.g. NULL in DB), add it as NaN
-    for col in model_package["feature_columns"]:
+
+    for col in feature_columns:
+
         if col not in X.columns:
             X[col] = np.nan
 
-    return X[model_package["feature_columns"]]
+    return X[feature_columns]
 
 def run_prediction_on_row(row: dict, row_num: int = None):
     raw = {
@@ -157,12 +94,29 @@ def run_prediction_on_row(row: dict, row_num: int = None):
                       "BASICITY_SLAG","SILICA_LOAD","RUNMODE",
                       "SIPREV_CASTNO","CURR_CASTNO")
     }
-    X_input  = engineer_features(raw)
-    X_scaled = pd.DataFrame(
-        model_package["scaler"].transform(X_input),
-        columns=model_package["feature_columns"]
+    steam_flow = raw.get("STEAM_FLOW", 0)
+
+    if steam_flow == 0:
+        package = steam_zero_package
+    else:
+        package = steam_nonzero_package
+
+    X_input = engineer_features(
+        raw,
+        package["feature_columns"]
     )
-    pred = round(float(model_package["model"].predict(X_scaled)[0]), 4)
+
+    X_scaled = pd.DataFrame(
+        package["scaler"].transform(X_input),
+        columns=package["feature_columns"]
+    )
+
+    pred = round(
+        float(
+            package["model"].predict(X_scaled)[0]
+        ),
+        4
+    )
 
     status = "normal"
     if pred < 0.4 or pred > 1.2:
@@ -175,8 +129,7 @@ def run_prediction_on_row(row: dict, row_num: int = None):
         "prediction": pred, "status": status,
         "hb_pres": raw.get("HB_PRES"), "temp_hm": raw.get("TEMP_HM"),
         "fuel_inj": raw.get("FUEL_INJ"), "raft": raw.get("RAFT"),
-        "etaco": raw.get("ETACO"), "cokerate": raw.get("COKERATE"),
-        "pcirate": raw.get("PCIRATE"),
+        "etaco": raw.get("ETACO"),
     }
 
     actual = row.get("SI_PRED")
@@ -203,27 +156,40 @@ def predict():
         return render_template("predict.html")
 
     data = request.get_json(force=True)
-    if model_package is None:
-        return jsonify({"error": "Model not loaded"}), 500
+    if (steam_zero_package is None or steam_nonzero_package is None):
+        return jsonify(
+            {"error": "Models not loaded"}
+        ), 500
 
     try:
         raw = {k: float(v) for k, v in data.items() if k != "actual_si"}
         actual_si = float(data["actual_si"]) if data.get("actual_si") else None
 
-        X_input = engineer_features(raw)
-        X_scaled = pd.DataFrame(
-            model_package["scaler"].transform(X_input),
-            columns=model_package["feature_columns"]
+        steam_flow = raw.get("STEAM_FLOW", 0)
+
+        if steam_flow == 0:
+            package = steam_zero_package
+        else:
+            package = steam_nonzero_package
+
+        X_input = engineer_features(
+            raw,
+            package["feature_columns"]
         )
-        pred = round(float(model_package["model"].predict(X_scaled)[0]), 4)
+
+        X_scaled = pd.DataFrame(
+        package["scaler"].transform(X_input),
+        columns=package["feature_columns"])
+
+        pred = round(
+            float(
+                    package["model"].predict(X_scaled)[0]),4)
 
         status = "normal"
         if pred < 0.4 or pred > 1.2:
             status = "out_of_range"
         elif pred < 0.5 or pred > 1.0:
             status = "warning"
-
-        save_prediction(raw, pred, actual_si)
 
         result = {"prediction": pred, "status": status}
         if actual_si is not None:
