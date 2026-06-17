@@ -1,6 +1,6 @@
 # SI Predictor — Blast Furnace Web App
 
-Extra Trees Regressor (R² = 87.35%) served as a Flask web app with MySQL storage.
+Extra Trees Regressor (R² = 98%) served as a Flask web app with MySQL storage.
 
 ---
 
@@ -81,48 +81,6 @@ Open your browser at: **http://localhost:5000**
 | `/`            | Landing page — model metrics & feature importance |
 | `/predict`     | Input form → real-time SI prediction              |
 
-## API Endpoints
-
-| Endpoint          | Method | Description                          |
-|-------------------|--------|--------------------------------------|
-| `/predict`        | POST   | JSON body → `{"prediction": 0.72, …}`|
-| `/api/db-records` | GET    | Last 50 rows from blast_furnace_data |
-
-### Example POST to /predict
-```json
-{
-  "HB_PRES": 450, "HB_VOL": 1250, "HB_TEMP": 1060,
-  "TEMP_HM": 1490, "FUEL_INJ": 155, "O2_FLOW": 7800,
-  "STEAM_FLOW": 4800, "HEAT_FLUX": 118, "TOP_PRES": 2.4,
-  "BURDEN_RES": 0.82, "RAFT": 2140, "ETACO": 0.476,
-  "COKERATE": 345, "PCIRATE": 148,
-  "M40COB6ANAL": 82.5, "M10COB6ANAL": 6.8,
-  "CSRCOB6ANAL": 62, "CRICOB6ANAL": 24.5,
-  "ASHCOB6ANAL": 10.2, "VMPCIANAL": 17.8,
-  "IMPCIANAL": 54, "ASHPCIANAL": 11.5,
-  "FE_PELLETANAL": 65.2, "SIO2_PELLETANAL": 3.4,
-  "AL2O3_PELLETANAL": 0.75,
-  "FE_SINTERANAL": 56.3, "SIO2_SINTERANAL": 5.1,
-  "CAO_SINTERANAL": 9.8, "MGO_SINTERANAL": 1.75,
-  "LIME_SINTERANAL": 1.92, "BSTY_SINTERANAL": 2.08,
-  "FE_OREANAL": 61.8, "SIO2_OREANAL": 4.2,
-  "AL2O3_OREANAL": 2.3,
-  "actual_si": 0.72
-}
-```
-
-### Response
-```json
-{
-  "prediction": 0.7183,
-  "status": "normal",
-  "actual": 0.72,
-  "error": 0.0017,
-  "correct": true
-}
-```
-
----
 
 ## Status codes
 
